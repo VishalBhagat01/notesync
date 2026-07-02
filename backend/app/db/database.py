@@ -1,15 +1,16 @@
-from sqlalchemy import create_engine
-from dotenv import load_dotenv
-import os
+from psycopg import connect
+from psycopg.rows import dict_row
 
-load_dotenv()
+from app.core.config import settings
 
-DATABASE_URL = os.getenv("DATABASE_URL")
 
-engine = create_engine(DATABASE_URL)
+def get_db():
+    conn = connect(
+        settings.DATABASE_URL,
+        row_factory=dict_row
+    )
 
-try:
-    with engine.connect() as conn:
-        print("Connected Successfully!")
-except Exception as e:
-    print(e)
+    try:
+        yield conn
+    finally:
+        conn.close()

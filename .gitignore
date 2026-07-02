@@ -10,6 +10,7 @@ backend/.coverage
 
 # Environment Variables
 backend/.env
+frontend/.env
 
 # ===============================
 # React / Vite

@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { loginUser } from "../api/authApi";
+import { registerUser } from "../api/authApi";
 
-function Login() {
+function Register() {
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
+    username: "",
     email: "",
     password: "",
   });
@@ -26,13 +27,10 @@ function Login() {
     setLoading(true);
 
     try {
-      const data = await loginUser(formData);
-
-      localStorage.setItem("access_token", data.access_token);
-
-      navigate("/dashboard");
+      await registerUser(formData);
+      navigate("/login");
     } catch (err) {
-      setError(err.response?.data?.detail || "Invalid email or password");
+      setError(err.response?.data?.detail || "Registration failed");
     } finally {
       setLoading(false);
     }
@@ -40,9 +38,17 @@ function Login() {
 
   return (
     <div>
-      <h1>Welcome back</h1>
+      <h1>Create your NoteSync account</h1>
 
       <form onSubmit={handleSubmit}>
+        <input
+          name="username"
+          placeholder="Username"
+          value={formData.username}
+          onChange={handleChange}
+          required
+        />
+
         <input
           name="email"
           type="email"
@@ -64,11 +70,11 @@ function Login() {
         {error && <p>{error}</p>}
 
         <button type="submit" disabled={loading}>
-          {loading ? "Logging in..." : "Login"}
+          {loading ? "Creating account..." : "Register"}
         </button>
       </form>
     </div>
   );
 }
 
-export default Login;
+export default Register;

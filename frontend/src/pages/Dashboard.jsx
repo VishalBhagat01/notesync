@@ -161,7 +161,7 @@ function Dashboard() {
   };
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
+    <div className="flex w-screen h-screen">
       <Sidebar
         notes={notes}
         selectedNote={selectedNote}
@@ -171,17 +171,11 @@ function Dashboard() {
         onLogout={handleLogout}
       />
 
-      <div style={{ flex: 1 }}>
+      <div className="flex flex-1 flex-col">
         {error && (
-          <p
-            style={{
-              color: "crimson",
-              padding: "10px 30px",
-              margin: 0,
-            }}
-          >
+          <div className="mx-8 mt-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
             {error}
-          </p>
+          </div>
         )}
 
         <NoteEditor

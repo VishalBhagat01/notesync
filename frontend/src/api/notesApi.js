@@ -16,7 +16,7 @@ export const getNoteById = async (noteId) => {
 };
 
 export const updateNote = async (noteId, noteData) => {
-  const response = await api.put(`/notes/${noteId}`, noteData);
+  const response = await api.patch(`/notes/${noteId}`, noteData);
   return response.data;
 };
 

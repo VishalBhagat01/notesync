@@ -53,7 +53,7 @@ def delete_post(id: int, db: Connection = Depends(get_db), current_user=Depends(
     return {"message": "Note deleted successfully"}
 
 
-@router.put("/{note_id}")
+@router.patch("/{note_id}")
 def edit_note(
     note_id: int,
     note: NoteUpdate,

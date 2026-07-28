@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+// NoteEditor is a presentational component; autosave is handled in Dashboard
 
 function NoteEditor({
   selectedNote,
@@ -8,15 +8,6 @@ function NoteEditor({
   onDelete,
 }) {
 
-  useEffect(() => {
-    if (!selectedNote) return;
-
-    const timer = setTimeout(() => {
-      onSave();
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [selectedNote?.title, selectedNote?.content, onSave]);
 
   if (!selectedNote) {
     return (

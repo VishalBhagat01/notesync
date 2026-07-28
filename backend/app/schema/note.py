@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -7,8 +9,8 @@ class NoteCreate(BaseModel):
 
 
 class NoteUpdate(BaseModel):
-    title: str = Field(max_length=255)
-    content: str
+    title: Optional[str] = Field(default=None, max_length=255)
+    content: Optional[str] = None
 
 
 class NoteResponse(BaseModel):

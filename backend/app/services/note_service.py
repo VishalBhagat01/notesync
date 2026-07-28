@@ -1,7 +1,7 @@
 from psycopg import Connection
 
 from app.schema.note import NoteCreate, NoteUpdate
-
+import time
 
 def create_note(db: Connection, note: NoteCreate, owner_id: int):
     with db.cursor() as cur:
@@ -56,8 +56,8 @@ def update_note(
         cur.execute(
             """
             UPDATE notes
-            SET title = %s,
-                content = %s,
+            SET title = COALESCE(%s, title),
+                content = COALESCE(%s, content),
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = %s AND owner_id = %s
             RETURNING id, title, content, owner_id, created_at, updated_at;

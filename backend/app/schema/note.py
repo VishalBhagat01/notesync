@@ -18,3 +18,7 @@ class NoteResponse(BaseModel):
     title: str
     content: str
     owner_id: int
+
+
+class NoteShare(BaseModel):
+    email: str

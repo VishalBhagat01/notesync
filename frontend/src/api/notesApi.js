@@ -24,3 +24,19 @@ export const deleteNote = async (noteId) => {
   const response = await api.delete(`/notes/${noteId}`);
   return response.data;
 };
+
+export const shareNote = async (noteId, email) => {
+  const response = await api.post(`/notes/${noteId}/share`, { email });
+  return response.data;
+};
+
+export const getNoteHistory = async (noteId) => {
+  const response = await api.get(`/notes/${noteId}/history`);
+  return response.data;
+};
+
+export const restoreNoteVersion = async (noteId, historyId) => {
+  const response = await api.post(`/notes/${noteId}/restore/${historyId}`);
+  return response.data;
+};
+

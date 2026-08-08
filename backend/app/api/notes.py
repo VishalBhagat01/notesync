@@ -74,3 +74,100 @@ def edit_note(
         )
 
     return updated_note
+
+
+from app.schema.note import NoteShare
+from app.services.note_service import share_note
+
+@router.post("/{note_id}/share")
+def share_note_endpoint(
+    note_id: int,
+    payload: NoteShare,
+    db: Connection = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    result = share_note(db, note_id, payload.email, current_user["id"])
+    if not result:
+        raise HTTPException(status_code=403, detail="Only the note owner can share this note")
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+from app.services.note_history_service import get_note_history, restore_note_version
+
+@router.get("/{note_id}/history")
+def get_history_endpoint(
+    note_id: int,
+    db: Connection = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    history = get_note_history(db, note_id, current_user["id"])
+    if history is None:
+        raise HTTPException(status_code=403, detail="Access denied")
+    return history
+
+
+@router.post("/{note_id}/restore/{history_id}")
+def restore_version_endpoint(
+    note_id: int,
+    history_id: int,
+    db: Connection = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    restored = restore_note_version(db, note_id, history_id, current_user["id"])
+    if not restored:
+        raise HTTPException(status_code=404, detail="Version not found")
+    return restored
+
+
+
+
+from fastapi import WebSocket, WebSocketDisconnect, Query
+from app.core.websocket_manager import manager
+from app.core.security import verify_token
+from app.services.auth_service import get_user_by_email
+
+@router.websocket("/ws/{note_id}")
+async def websocket_note_endpoint(
+    websocket: WebSocket,
+    note_id: int,
+    token: str = Query(...)
+):
+    payload = verify_token(token)
+    if not payload or not payload.get("sub"):
+        await websocket.close(code=4001)
+        return
+
+    db = next(get_db())
+    try:
+        user = get_user_by_email(db, payload.get("sub"))
+        if not user:
+            await websocket.close(code=4001)
+            return
+        
+        await manager.connect(websocket, note_id, user)
+        
+        while True:
+            data = await websocket.receive_json()
+            # Broadcast edit/cursor events to all connected clients in the note room
+            await manager.broadcast_to_room(note_id, data, sender=websocket)
+            
+            # If edit event contains title/content, persist to database asynchronously
+            if data.get("type") == "edit":
+                title = data.get("title")
+                content = data.get("content")
+                update_note(
+                    db,
+                    note_id,
+                    NoteUpdate(title=title, content=content),
+                    user["id"]
+                )
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, note_id)
+        await manager.broadcast_presence(note_id)
+    except Exception as e:
+        manager.disconnect(websocket, note_id)
+        await manager.broadcast_presence(note_id)
+    finally:
+        db.close()

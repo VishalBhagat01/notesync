@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Sidebar from "../components/Sidebar";
 import NoteEditor from "../components/NoteEditor";
+import { useWebSocketNote } from "../hooks/useWebSocketNote";
 
 import {
   createNote,
@@ -10,6 +11,9 @@ import {
   getNoteById,
   getNotes,
   updateNote,
+  shareNote,
+  getNoteHistory,
+  restoreNoteVersion,
 } from "../api/notesApi";
 
 function Dashboard() {
@@ -20,9 +24,64 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [activeUsers, setActiveUsers] = useState([]);
+  const [historyList, setHistoryList] = useState([]);
+
+  const handleShareNote = async (noteId, email) => {
+    return await shareNote(noteId, email);
+  };
+
+  const handleFetchHistory = async (noteId) => {
+    try {
+      const data = await getNoteHistory(noteId);
+      setHistoryList(data || []);
+    } catch (err) {
+      console.error("Could not fetch history", err);
+    }
+  };
+
+  const handleRestoreVersion = async (noteId, historyId) => {
+    try {
+      const restored = await restoreNoteVersion(noteId, historyId);
+      if (restored) {
+        setSelectedNote(restored);
+        setNotes((currentNotes) =>
+          currentNotes.map((note) => (note.id === restored.id ? restored : note))
+        );
+      }
+    } catch (err) {
+      setError("Could not restore version");
+    }
+  };
+
+
 
   const saveTimeoutRef = useRef(null);
   const isFirstLoadRef = useRef(true);
+  const isRemoteUpdateRef = useRef(false);
+
+  // Callback when remote socket sends live edit updates
+  const handleRemoteUpdate = useCallback((data) => {
+    isRemoteUpdateRef.current = true;
+    setSelectedNote((current) => {
+      if (!current || current.id !== data.note_id) return current;
+      return {
+        ...current,
+        ...(data.title !== undefined && { title: data.title }),
+        ...(data.content !== undefined && { content: data.content }),
+      };
+    });
+  }, []);
+
+  const handlePresenceUpdate = useCallback((users) => {
+    setActiveUsers(users);
+  }, []);
+
+  const { isConnected, sendEdit } = useWebSocketNote(
+    selectedNote?.id,
+    handleRemoteUpdate,
+    handlePresenceUpdate
+  );
 
   const loadNotes = async () => {
     try {
@@ -76,10 +135,18 @@ function Dashboard() {
   const handleChange = (event) => {
     const { name, value } = event.target;
 
-    setSelectedNote((currentNote) => ({
-      ...currentNote,
-      [name]: value,
-    }));
+    setSelectedNote((currentNote) => {
+      const nextNote = {
+        ...currentNote,
+        [name]: value,
+      };
+      
+      // Send real-time change over WebSocket to connected peers
+      if (isConnected) {
+        sendEdit(nextNote.title, nextNote.content);
+      }
+      return nextNote;
+    });
   };
 
   const saveCurrentNote = async () => {
@@ -93,8 +160,6 @@ function Dashboard() {
         title: selectedNote.title,
         content: selectedNote.content,
       });
-
-      setSelectedNote(updatedNote);
 
       setNotes((currentNotes) =>
         currentNotes.map((note) =>
@@ -118,6 +183,11 @@ function Dashboard() {
 
     if (isFirstLoadRef.current) {
       isFirstLoadRef.current = false;
+      return;
+    }
+
+    if (isRemoteUpdateRef.current) {
+      isRemoteUpdateRef.current = false;
       return;
     }
 
@@ -181,10 +251,18 @@ function Dashboard() {
         <NoteEditor
           selectedNote={selectedNote}
           saving={saving}
+          activeUsers={activeUsers}
+          isConnected={isConnected}
           onChange={handleChange}
           onSave={handleSave}
           onDelete={handleDelete}
+          onShare={handleShareNote}
+          onFetchHistory={handleFetchHistory}
+          onRestoreVersion={handleRestoreVersion}
+          historyList={historyList}
         />
+
+
       </div>
     </div>
   );

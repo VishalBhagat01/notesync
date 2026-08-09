@@ -200,11 +200,15 @@ function Dashboard() {
     return () => clearTimeout(saveTimeoutRef.current);
   }, [selectedNote?.title, selectedNote?.content]);
 
-  const handleDelete = async () => {
-    if (!selectedNote) return;
+  const handleDelete = async (noteId = null) => {
+    const targetId = noteId ?? selectedNote?.id;
+    if (!targetId) return;
+
+    const targetNote = notes.find((note) => note.id === targetId) || selectedNote;
+    const targetTitle = targetNote?.title || "this note";
 
     const shouldDelete = window.confirm(
-      `Delete "${selectedNote.title}"?`
+      `Delete "${targetTitle}"?`
     );
 
     if (!shouldDelete) return;
@@ -212,14 +216,16 @@ function Dashboard() {
     try {
       setError("");
 
-      await deleteNote(selectedNote.id);
+      await deleteNote(targetId);
 
       setNotes((currentNotes) =>
-        currentNotes.filter((note) => note.id !== selectedNote.id)
+        currentNotes.filter((note) => note.id !== targetId)
       );
 
-      clearTimeout(saveTimeoutRef.current);
-      setSelectedNote(null);
+      if (selectedNote?.id === targetId) {
+        clearTimeout(saveTimeoutRef.current);
+        setSelectedNote(null);
+      }
     } catch (err) {
       setError("Could not delete note");
     }
@@ -239,6 +245,7 @@ function Dashboard() {
         onSelectNote={handleSelectNote}
         onCreateNote={handleCreateNote}
         onLogout={handleLogout}
+        onDeleteNote={handleDelete}
       />
 
       <div className="flex flex-1 flex-col">

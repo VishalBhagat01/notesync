@@ -7,6 +7,7 @@ function Sidebar({
   onSelectNote,
   onCreateNote,
   onLogout,
+  onDeleteNote,
 }) {
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -20,39 +21,54 @@ function Sidebar({
 
   const renderNoteCard = (note) => {
     const isSelected = selectedNote?.id === note.id;
+    const canDelete = note.is_owner !== false;
+
     return (
-      <button
-        key={note.id}
-        onClick={() => onSelectNote(note.id)}
-        className={`group relative mb-2 w-full rounded-2xl border p-3.5 text-left transition-all duration-200 ${
-          isSelected
-            ? "border-violet-500/50 bg-violet-600/10 shadow-lg shadow-violet-500/10 ring-1 ring-violet-500/30"
-            : "border-zinc-900 bg-zinc-900/60 hover:border-zinc-800 hover:bg-zinc-900"
-        }`}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <h3
-            className={`truncate text-sm font-semibold tracking-tight ${
-              isSelected ? "text-white" : "text-zinc-300 group-hover:text-white"
-            }`}
-          >
-            {note.title || "Untitled Note"}
-          </h3>
-          {note.is_owner === false && (
-            <span className="shrink-0 rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-semibold text-violet-300 border border-violet-500/30">
-              Shared
-            </span>
-          )}
-        </div>
+      <div key={note.id} className="group relative mb-2">
+        <button
+          onClick={() => onSelectNote(note.id)}
+          className={`w-full rounded-2xl border p-3.5 pr-20 text-left transition-all duration-200 ${
+            isSelected
+              ? "border-zinc-700 bg-zinc-800/80 ring-1 ring-zinc-700 shadow-sm"
+              : "border-zinc-900 bg-zinc-900/60 hover:border-zinc-800 hover:bg-zinc-900"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <h3
+              className={`truncate text-sm font-semibold tracking-tight ${
+                isSelected ? "text-white" : "text-zinc-300 group-hover:text-white"
+              }`}
+            >
+              {note.title || "Untitled Note"}
+            </h3>
+          </div>
 
-        <p className="mt-1.5 line-clamp-2 text-xs text-zinc-500 leading-relaxed group-hover:text-zinc-400">
-          {note.content || "No content..."}
-        </p>
+          <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-zinc-500 group-hover:text-zinc-400">
+            {note.content || "No content..."}
+          </p>
 
-        {isSelected && (
-          <span className="absolute right-3.5 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-violet-400 shadow-md shadow-violet-400/80" />
+          
+        </button>
+
+        {note.is_owner === false && (
+          <span className="pointer-events-none absolute right-2.5 top-2.5 shrink-0 rounded-full border border-violet-500/30 bg-violet-500/20 px-2 py-0.5 text-[10px] font-semibold text-violet-300">
+            Shared
+          </span>
         )}
-      </button>
+
+        {canDelete && (
+          <button
+            onClick={() => onDeleteNote(note.id)}
+            className={`absolute right-3.5 top-1/2 -translate-y-1/2  rounded-lg border border-transparent px-2 py-1 text-[11px] font-medium text-zinc-500 transition-all duration-150 hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400 focus:opacity-100 ${
+              isSelected ? "opacity-80" : "opacity-0 group-hover:opacity-100"
+            }`}
+            title="Delete note"
+            aria-label="Delete note"
+          >
+            Delete
+          </button>
+        )}
+      </div>
     );
   };
 
@@ -61,15 +77,11 @@ function Sidebar({
       {/* Brand Header */}
       <div className="flex items-center justify-between pb-4 border-b border-zinc-900">
         <div className="flex items-center gap-1">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-violet-600 to-fuchsia-500 shadow-lg shadow-violet-500/25">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-          </div>
+          
           <div>
-            <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-violet-400 via-fuchsia-300 to-pink-400 bg-clip-text text-transparent">
+            <h3 className="text-xl font-bold text-white/90 bg-clip-text text-transparent">
               NoteSync
-            </h1>
+            </h3>
           </div>
         </div>
       </div>
@@ -77,7 +89,7 @@ function Sidebar({
       {/* New Note Action */}
       <button
         onClick={onCreateNote}
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-600/20 transition-all duration-200 hover:from-violet-500 hover:to-fuchsia-500 hover:shadow-violet-500/30 active:scale-[0.98]"
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold border border-zinc-700 transition-all duration-200 px-4 py-2.5 text-sm font-semibold text-white shadow-lg transition-all duration-200  hover:to-fuchsia-500 hover:shadow-violet-500/30 active:scale-[0.98]"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />

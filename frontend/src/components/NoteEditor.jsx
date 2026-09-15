@@ -1,12 +1,11 @@
-// NoteEditor is a presentational component; autosave is handled in Dashboard
-
-import { useState } from "react";
+import { useState, useRef, useEffect, memo } from "react";
 
 function NoteEditor({
   selectedNote,
   saving,
   activeUsers = [],
   isConnected = false,
+  connectionStatus = "connected", // 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
   onChange,
   onSave,
   onDelete,
@@ -20,6 +19,30 @@ function NoteEditor({
   const [shareEmail, setShareEmail] = useState("");
   const [shareStatus, setShareStatus] = useState({ loading: false, msg: "", isError: false });
 
+  // Refs for inputs to preserve cursor position during concurrent remote edits
+  const textareaRef = useRef(null);
+  const titleInputRef = useRef(null);
+  const cursorContentRef = useRef({ start: 0, end: 0 });
+
+  // Track cursor position on local selection/keystrokes
+  const handleContentSelect = (e) => {
+    cursorContentRef.current = {
+      start: e.target.selectionStart,
+      end: e.target.selectionEnd,
+    };
+  };
+
+  // Restore cursor if remote update arrived while focused
+  useEffect(() => {
+    if (textareaRef.current && document.activeElement === textareaRef.current) {
+      const { start, end } = cursorContentRef.current;
+      // Maintain cursor within bounds of the new content length
+      const maxLen = textareaRef.current.value.length;
+      const targetStart = Math.min(start, maxLen);
+      const targetEnd = Math.min(end, maxLen);
+      textareaRef.current.setSelectionRange(targetStart, targetEnd);
+    }
+  }, [selectedNote?.content]);
 
   const handleShareSubmit = async (e) => {
     e.preventDefault();
@@ -71,23 +94,27 @@ function NoteEditor({
     );
   }
 
+  // Connection badge status text and styling
+  const connectionBadge = {
+    connected: { color: "bg-emerald-500 animate-pulse", text: "Live Sync Connected" },
+    reconnecting: { color: "bg-amber-500 animate-pulse", text: "Reconnecting sync..." },
+    connecting: { color: "bg-blue-500 animate-pulse", text: "Connecting..." },
+    disconnected: { color: "bg-zinc-600", text: "Offline (Local mode)" },
+  }[connectionStatus] || { color: "bg-zinc-600", text: "Disconnected" };
+
   return (
     <main className="flex-1 p-8 bg-zinc-950 text-white relative">
       <div className="mx-auto max-w-4xl">
-        {/* Active Collaborators Bar */}
+        {/* Active Collaborators & Connection Bar */}
         <div className="mb-4 flex items-center justify-between border-b border-zinc-800/60 pb-3">
           <div className="flex items-center gap-2">
-            <span
-              className={`h-2.5 w-2.5 rounded-full ${
-                isConnected ? "bg-emerald-500 animate-pulse" : "bg-zinc-600"
-              }`}
-            />
+            <span className={`h-2.5 w-2.5 rounded-full ${connectionBadge.color}`} />
             <span className="text-xs font-medium text-zinc-400">
-              {isConnected ? "Live Sync Connected" : "Connecting sync..."}
+              {connectionBadge.text}
             </span>
           </div>
 
-          {/* User Presence Avatars & Share button */}
+          {/* User Presence Avatars & Actions */}
           <div className="flex items-center gap-4">
             {activeUsers.length > 0 && (
               <div className="flex items-center gap-2">
@@ -134,9 +161,9 @@ function NoteEditor({
           </div>
         </div>
 
-
         {/* Title */}
         <input
+          ref={titleInputRef}
           name="title"
           value={selectedNote.title || ""}
           onChange={onChange}
@@ -144,11 +171,15 @@ function NoteEditor({
           className="w-full bg-transparent text-5xl font-bold tracking-tight placeholder:text-zinc-600 outline-none border-b border-zinc-800 pb-4 focus:border-violet-500 transition-colors"
         />
 
-        {/* Content */}
+        {/* Content with cursor tracking */}
         <textarea
+          ref={textareaRef}
           name="content"
           value={selectedNote.content || ""}
           onChange={onChange}
+          onSelect={handleContentSelect}
+          onKeyUp={handleContentSelect}
+          onClick={handleContentSelect}
           placeholder="Start writing your thoughts..."
           className="mt-8 w-full min-h-[450px] bg-transparent text-lg leading-8 text-zinc-300 placeholder:text-zinc-600 outline-none resize-none"
         />
@@ -175,10 +206,20 @@ function NoteEditor({
           <div className="flex items-center gap-2 text-sm text-zinc-400">
             <div
               className={`h-2 w-2 rounded-full ${
-                saving ? "bg-yellow-400 animate-pulse" : "bg-emerald-400"
+                saving
+                  ? "bg-yellow-400 animate-pulse"
+                  : isConnected
+                  ? "bg-emerald-400"
+                  : "bg-zinc-500"
               }`}
             />
-            <span>{saving ? "Saving..." : "All changes saved"}</span>
+            <span>
+              {saving
+                ? "Saving..."
+                : isConnected
+                ? "Live sync active"
+                : "All changes saved locally"}
+            </span>
           </div>
         </div>
       </div>
@@ -242,6 +283,7 @@ function NoteEditor({
           </div>
         </div>
       )}
+
       {/* Version History Drawer */}
       {showHistoryDrawer && (
         <div className="fixed inset-y-0 right-0 z-50 w-96 border-l border-zinc-800 bg-zinc-900 p-6 shadow-2xl flex flex-col">
@@ -310,4 +352,4 @@ function NoteEditor({
   );
 }
 
-export default NoteEditor;
+export default memo(NoteEditor);

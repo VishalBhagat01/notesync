@@ -27,57 +27,49 @@ function Dashboard() {
   const [activeUsers, setActiveUsers] = useState([]);
   const [historyList, setHistoryList] = useState([]);
 
-  const handleShareNote = async (noteId, email) => {
-    return await shareNote(noteId, email);
-  };
-
-  const handleFetchHistory = async (noteId) => {
-    try {
-      const data = await getNoteHistory(noteId);
-      setHistoryList(data || []);
-    } catch (err) {
-      console.error("Could not fetch history", err);
-    }
-  };
-
-  const handleRestoreVersion = async (noteId, historyId) => {
-    try {
-      const restored = await restoreNoteVersion(noteId, historyId);
-      if (restored) {
-        setSelectedNote(restored);
-        setNotes((currentNotes) =>
-          currentNotes.map((note) => (note.id === restored.id ? restored : note))
-        );
-      }
-    } catch (err) {
-      setError("Could not restore version");
-    }
-  };
-
-
-
   const saveTimeoutRef = useRef(null);
+  const sidebarSyncTimeoutRef = useRef(null);
   const isFirstLoadRef = useRef(true);
   const isRemoteUpdateRef = useRef(false);
 
-  // Callback when remote socket sends live edit updates
-  const handleRemoteUpdate = useCallback((data) => {
-    isRemoteUpdateRef.current = true;
-    setSelectedNote((current) => {
-      if (!current || current.id !== data.note_id) return current;
-      return {
-        ...current,
-        ...(data.title !== undefined && { title: data.title }),
-        ...(data.content !== undefined && { content: data.content }),
-      };
-    });
+  // Sync active note title/preview to sidebar notes list with a 800ms debounce
+  // This prevents re-mapping and filtering the full notes array on every single keystroke
+  const scheduleSidebarSync = useCallback((noteId, title, content) => {
+    clearTimeout(sidebarSyncTimeoutRef.current);
+    sidebarSyncTimeoutRef.current = setTimeout(() => {
+      setNotes((currentNotes) =>
+        currentNotes.map((note) =>
+          note.id === noteId
+            ? { ...note, title: title ?? note.title, content: content ?? note.content }
+            : note
+        )
+      );
+    }, 800);
   }, []);
+
+  // Callback when remote socket sends live edit updates
+  const handleRemoteUpdate = useCallback(
+    (data) => {
+      isRemoteUpdateRef.current = true;
+      setSelectedNote((current) => {
+        if (!current || current.id !== data.note_id) return current;
+        return {
+          ...current,
+          ...(data.title !== undefined && { title: data.title }),
+          ...(data.content !== undefined && { content: data.content }),
+        };
+      });
+
+      scheduleSidebarSync(data.note_id, data.title, data.content);
+    },
+    [scheduleSidebarSync]
+  );
 
   const handlePresenceUpdate = useCallback((users) => {
     setActiveUsers(users);
   }, []);
 
-  const { isConnected, sendEdit } = useWebSocketNote(
+  const { isConnected, connectionStatus, sendEdit, flushPendingEdit } = useWebSocketNote(
     selectedNote?.id,
     handleRemoteUpdate,
     handlePresenceUpdate
@@ -87,7 +79,6 @@ function Dashboard() {
     try {
       setLoading(true);
       setError("");
-
       const data = await getNotes();
       setNotes(data);
     } catch (err) {
@@ -102,11 +93,14 @@ function Dashboard() {
   }, []);
 
   const handleSelectNote = async (noteId) => {
+    // If switching notes, flush any pending edit for current note first
+    flushPendingEdit();
+    clearTimeout(saveTimeoutRef.current);
+    clearTimeout(sidebarSyncTimeoutRef.current);
+
     try {
       setError("");
-
       const note = await getNoteById(noteId);
-
       isFirstLoadRef.current = true;
       setSelectedNote(note);
     } catch (err) {
@@ -115,16 +109,15 @@ function Dashboard() {
   };
 
   const handleCreateNote = async () => {
+    flushPendingEdit();
     try {
       setError("");
-
       const newNote = await createNote({
         title: "Untitled Note",
         content: "",
       });
 
       setNotes((currentNotes) => [newNote, ...currentNotes]);
-
       isFirstLoadRef.current = true;
       setSelectedNote(newNote);
     } catch (err) {
@@ -140,11 +133,15 @@ function Dashboard() {
         ...currentNote,
         [name]: value,
       };
-      
-      // Send real-time change over WebSocket to connected peers
+
+      // Broadcast real-time change over throttled WebSocket to connected peers
       if (isConnected) {
         sendEdit(nextNote.title, nextNote.content);
       }
+
+      // Schedule low-overhead sidebar preview update
+      scheduleSidebarSync(nextNote.id, nextNote.title, nextNote.content);
+
       return nextNote;
     });
   };
@@ -175,9 +172,14 @@ function Dashboard() {
 
   const handleSave = async () => {
     clearTimeout(saveTimeoutRef.current);
+    flushPendingEdit();
     await saveCurrentNote();
   };
 
+  // HTTP Autosave Fallback:
+  // CRITICAL CONCURRENCY FIX: Only schedule HTTP autosave if WebSocket is NOT connected (offline fallback).
+  // When WebSocket is connected, real-time sync is active and delayed HTTP PATCH calls cause
+  // race conditions that overwrite concurrent peer edits.
   useEffect(() => {
     if (!selectedNote) return;
 
@@ -191,14 +193,20 @@ function Dashboard() {
       return;
     }
 
-    clearTimeout(saveTimeoutRef.current);
+    // Suppress HTTP autosave if live sync via WebSocket is active
+    if (isConnected) {
+      clearTimeout(saveTimeoutRef.current);
+      return;
+    }
 
+    // Fallback: If offline or disconnected, save via HTTP after 1.5s idle
+    clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       saveCurrentNote();
     }, 1500);
 
     return () => clearTimeout(saveTimeoutRef.current);
-  }, [selectedNote?.title, selectedNote?.content]);
+  }, [selectedNote?.title, selectedNote?.content, isConnected]);
 
   const handleDelete = async (noteId = null) => {
     const targetId = noteId ?? selectedNote?.id;
@@ -207,20 +215,14 @@ function Dashboard() {
     const targetNote = notes.find((note) => note.id === targetId) || selectedNote;
     const targetTitle = targetNote?.title || "this note";
 
-    const shouldDelete = window.confirm(
-      `Delete "${targetTitle}"?`
-    );
-
+    const shouldDelete = window.confirm(`Delete "${targetTitle}"?`);
     if (!shouldDelete) return;
 
     try {
       setError("");
-
       await deleteNote(targetId);
 
-      setNotes((currentNotes) =>
-        currentNotes.filter((note) => note.id !== targetId)
-      );
+      setNotes((currentNotes) => currentNotes.filter((note) => note.id !== targetId));
 
       if (selectedNote?.id === targetId) {
         clearTimeout(saveTimeoutRef.current);
@@ -228,6 +230,33 @@ function Dashboard() {
       }
     } catch (err) {
       setError("Could not delete note");
+    }
+  };
+
+  const handleShareNote = async (noteId, email) => {
+    return await shareNote(noteId, email);
+  };
+
+  const handleFetchHistory = async (noteId) => {
+    try {
+      const data = await getNoteHistory(noteId);
+      setHistoryList(data || []);
+    } catch (err) {
+      console.error("Could not fetch history", err);
+    }
+  };
+
+  const handleRestoreVersion = async (noteId, historyId) => {
+    try {
+      const restored = await restoreNoteVersion(noteId, historyId);
+      if (restored) {
+        setSelectedNote(restored);
+        setNotes((currentNotes) =>
+          currentNotes.map((note) => (note.id === restored.id ? restored : note))
+        );
+      }
+    } catch (err) {
+      setError("Could not restore version");
     }
   };
 
@@ -240,7 +269,7 @@ function Dashboard() {
     <div className="flex w-screen h-screen">
       <Sidebar
         notes={notes}
-        selectedNote={selectedNote}
+        selectedNoteId={selectedNote?.id}
         loading={loading}
         onSelectNote={handleSelectNote}
         onCreateNote={handleCreateNote}
@@ -260,6 +289,7 @@ function Dashboard() {
           saving={saving}
           activeUsers={activeUsers}
           isConnected={isConnected}
+          connectionStatus={connectionStatus}
           onChange={handleChange}
           onSave={handleSave}
           onDelete={handleDelete}
@@ -268,8 +298,6 @@ function Dashboard() {
           onRestoreVersion={handleRestoreVersion}
           historyList={historyList}
         />
-
-
       </div>
     </div>
   );

@@ -45,3 +45,5 @@ coverage/
 # Misc
 # ===============================
 .env
+
+SCALABILITY_AND_OPTIMIZATION_GUIDE.md

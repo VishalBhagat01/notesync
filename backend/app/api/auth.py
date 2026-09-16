@@ -29,7 +29,7 @@ def register(
 
         raise HTTPException(
             status_code=400,
-            detail="Email already registered"
+            detail="Registration failed. Please check your details."
         )
 
     return new_user

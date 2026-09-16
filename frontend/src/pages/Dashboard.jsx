@@ -266,7 +266,7 @@ function Dashboard() {
   };
 
   return (
-    <div className="flex w-screen h-screen">
+    <div className="flex w-screen h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] overflow-hidden transition-colors duration-200">
       <Sidebar
         notes={notes}
         selectedNoteId={selectedNote?.id}
@@ -277,7 +277,7 @@ function Dashboard() {
         onDeleteNote={handleDelete}
       />
 
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col bg-[var(--bg-canvas)] overflow-hidden">
         {error && (
           <div className="mx-8 mt-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
             {error}
